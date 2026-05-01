@@ -1,4 +1,4 @@
-Multi-Domain Support Triage Agent
+AI Support Triage Agent
 
 This project is a **rule-driven AI triage system** designed to process support tickets across different ecosystems (HackerRank, Claude, Visa) and decide **when to respond vs when to escalate**.
 
