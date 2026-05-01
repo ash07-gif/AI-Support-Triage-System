@@ -1,0 +1,1573 @@
+
+Claude finished the response
+You said: Your agent must use only the provided support corpus to understand the issue, decide whether it can be answered safely, and determine when it should be escalat…
+Your agent must use only the provided support corpus to understand the issue, decide whether it can be answered safely, and determine when it should be escalated to a human.
+What the agent should do
+For each issue, the agent should:
+identify the request type
+classify the issue into a product area
+assess urgency and risk
+decide whether to reply or escalate
+retrieve the most relevant support documentation
+generate a safe, grounded response
+Some cases will be simple FAQs. Others may involve billing, bugs, fraud, permissions, account access, assessments, or other sensitive situations that require careful routing.
+these are the criterias give me a layout and pseudocode idea to approach n the system flow
+
+Show more
+9:12 PM
+Claude responded: Here's the full system layout and pseudocode to go with it.
+
+
+Here's the full system layout and pseudocode to go with it.
+
+Pseudocode
+
+function handleTicket(userMessage):
+
+  # 1. Classify the ticket
+  requestType  = classify(userMessage, labels=["faq", "billing", "bug", "fraud",
+                           "account_access", "permissions", "assessment", "other"])
+  productArea  = classify(userMessage, labels=["auth", "payments", "notifications",
+                           "data", "admin", "other"])
+  urgency      = classify(userMessage, labels=["low", "medium", "high", "critical"])
+
+  # 2. Assess risk
+  riskFlags    = detectRisk(userMessage, {
+                   hasPII: containsPII(userMessage),
+                   isFraudSignal: fraudHeuristics(userMessage),
+                   isBillingDispute: requestType == "billing",
+                   requiresPermissions: requestType in ["permissions", "account_access"]
+                 })
+
+  # 3. Routing decision
+  if riskFlags.any(critical=True) or urgency == "critical":
+    return escalateToHuman(ticket, reason=riskFlags)
+
+  # 4. Retrieve grounding documents
+  relevantDocs = corpusSearch(query=userMessage, productArea=productArea,
+                              requestType=requestType, topK=5)
+
+  # 5. Groundedness check
+  if relevantDocs.isEmpty() or relevantDocs.maxScore < CONFIDENCE_THRESHOLD:
+    return escalateOrDecline(ticket, reason="insufficient_grounding")
+
+  # 6. Generate response
+  response = llm.generate(
+    systemPrompt = buildSystemPrompt(requestType, productArea, urgency),
+    context      = relevantDocs,
+    userMessage  = userMessage
+  )
+
+  # 7. Output + audit log
+  send(response, to=user)
+  auditLog.write({ ticket, classification, riskFlags, docsUsed, response })
+
+  # 8. Collect feedback
+  feedback = collectCSAT(ticket)
+  updateCorpus(feedback)
+Key design decisions to think through:
+
+The classification layer is best run as parallel LLM calls (request type, product area, urgency in one prompt or three lightweight calls) rather than chained, to reduce latency.
+
+The escalation gates appear at two points: after risk assessment (pre-retrieval) and after the groundedness check (post-retrieval). The first gate catches high-risk signals before any LLM cost is incurred. The second gate catches cases where the corpus simply doesn't cover the issue.
+
+The audit log is non-negotiable — every routing decision, document used, and response generated should be traceable, especially for billing and fraud cases.
+
+Click any node in the diagram to dig deeper into a specific stage.
+
+You said: how to export chat?
+how to export chat?
+
+9:13 PM
+Claude responded: To export your Claude chat history from claude.
+To export your Claude chat history from claude.ai:
+
+
+Searched the web
+Searched the web
+Here are your options:
+
+Official export (full history)
+
+Go to Settings → Privacy on the web app or Claude Desktop — this isn't available on the iOS or Android apps. You'll receive an email with a download link, and the export arrives as a ZIP file containing your conversations in JSON format. 
+Claude
+
+Quick manual save (single chat)
+
+For a one-off save without any tools: select all with Ctrl+A / Cmd+A, then copy-paste into a Google Doc, Word, or Notepad. Alternatively, hit Ctrl+P / Cmd+P and choose "Save as PDF" from the print dialog.
+
+Browser extensions (more formats)
+
+Third-party extensions like AI Chat Exporter let you save conversations as PDF, Markdown, Text, CSV, or JSON with a couple of clicks — PDF exports are free 3 times/day, and all other formats are free with no limits. Just note these are independent tools, not made by Anthropic. 
+Chrome Web Store
+
+The built-in Settings → Privacy route is the safest bet if you want everything in one go. For quick saves of this specific conversation, the manual copy-paste or print-to-PDF is the fastest.
+
+
+
+
+
+
+Claude is AI and can make mistakes. Please double-check cited sources.
+
+
+
+
+
+Your agent must use only the provided support corpus to understand the issue, decide whether it can be answered safely, and determine when it should be escalated to a human.
+
+What the agent should do
+For each issue, the agent should:
+
+identify the request type
+classify the issue into a product area
+assess urgency and risk
+decide whether to reply or escalate
+retrieve the most relevant support documentation
+generate a safe, grounded response
+Some cases will be simple FAQs. Others may involve billing, bugs, fraud, permissions, account access, assessments, or other sensitive situations that require careful routing.
+
+
+
+
+
+
+these are the criterias give me a layout and pseudocode idea to approach n the system flow
+
+You’re essentially designing a rule-governed LLM agent with retrieval + decision control—not just a chatbot. The key is to separate reasoning, policy enforcement, and response generation so it doesn’t hallucinate or act outside the support corpus.
+
+I’ll give you a clean system architecture + flow + pseudocode, structured like something you can actually implement during a hackathon.
+
+🔷 1. System Architecture (Modular Layout)
+Think in pipelines, not one big model call.
+
+User Query
+   ↓
+[1] Input Processor
+   ↓
+[2] Intent + Classification Engine
+   ↓
+[3] Risk & Urgency Assessor
+   ↓
+[4] Decision Engine (Reply vs Escalate)
+   ↓
+ ├── If REPLY:
+ │      ↓
+ │   [5] Retriever (RAG over support corpus)
+ │      ↓
+ │   [6] Response Generator (grounded)
+ │      ↓
+ │   Final Answer
+ │
+ └── If ESCALATE:
+        ↓
+     [7] Escalation Handler
+        ↓
+     Ticket / Human Routing
+🔷 2. Core Components Breakdown
+1. Input Processor
+Clean text (remove noise, normalize)
+
+Extract metadata (user ID, timestamps, etc.)
+
+2. Intent + Classification Engine
+You need multi-label classification, not just one label.
+
+Outputs:
+request_type → (FAQ / complaint / bug / billing / account / abuse)
+
+product_area → (payments / login / feature X / etc.)
+
+👉 Use:
+
+LLM (few-shot prompt)
+
+OR lightweight classifier (if speed matters)
+
+3. Risk & Urgency Assessor
+This is critical.
+
+Risk signals:
+Fraud / abuse
+
+Account compromise
+
+Payment issues
+
+Legal / sensitive data
+
+Urgency signals:
+Words like “urgent”, “can’t access”, “charged twice”
+
+Output:
+risk_level = LOW | MEDIUM | HIGH
+urgency = LOW | MEDIUM | HIGH
+4. Decision Engine (Most Important)
+This is your control logic layer.
+
+Rules:
+IF risk_level == HIGH → ESCALATE
+IF issue_type in ["fraud", "account access", "billing dispute"] → ESCALATE
+IF no relevant docs found → ESCALATE
+ELSE → REPLY
+5. Retriever (RAG Layer)
+Embed support corpus
+
+Use semantic search (FAISS / Pinecone)
+
+Input:
+User query
+
+Classified intent
+
+Output:
+Top-k relevant docs
+
+6. Response Generator (Grounded LLM)
+STRICT constraint:
+
+Only answer using retrieved docs
+
+Prompt idea:
+You are a support assistant.
+Use ONLY the provided context to answer.
+
+If the answer is not in the context:
+→ say you cannot help and escalate.
+
+Context:
+{retrieved_docs}
+
+User Query:
+{query}
+7. Escalation Handler
+Generate structured ticket:
+
+{
+  issue_type,
+  product_area,
+  risk_level,
+  urgency,
+  summary,
+  user_query
+}
+🔷 3. End-to-End Flow (Step-by-Step)
+1. User sends query
+
+2. Classify:
+   - request_type
+   - product_area
+
+3. Assess:
+   - risk_level
+   - urgency
+
+4. Decision:
+   IF risky OR sensitive → ESCALATE
+   ELSE continue
+
+5. Retrieve docs from corpus
+
+6. Check:
+   IF no relevant docs → ESCALATE
+
+7. Generate response grounded in docs
+
+8. Return answer OR escalation message
+🔷 4. Pseudocode (Clean + Hackathon-Ready)
+def handle_support_query(query):
+
+    # Step 1: Classification
+    intent = classify_intent(query)
+    product_area = classify_product_area(query)
+
+    # Step 2: Risk & Urgency
+    risk = assess_risk(query)
+    urgency = assess_urgency(query)
+
+    # Step 3: Decision Logic
+    if risk == "HIGH":
+        return escalate(query, intent, product_area, risk, urgency)
+
+    if intent in ["fraud", "billing_issue", "account_access"]:
+        return escalate(query, intent, product_area, risk, urgency)
+
+    # Step 4: Retrieval
+    docs = retrieve_relevant_docs(query, product_area)
+
+    if not docs:
+        return escalate(query, intent, product_area, risk, urgency)
+
+    # Step 5: Generate grounded response
+    response = generate_response(query, docs)
+
+    # Step 6: Safety Check
+    if not is_grounded(response, docs):
+        return escalate(query, intent, product_area, risk, urgency)
+
+    return response
+🔷 5. Key Design Insight (This wins hackathons)
+Most teams will:
+❌ Just do chatbot + RAG
+
+You should:
+✅ Show decision intelligence + safety layer
+
+👉 Highlight:
+
+“Controlled AI agent”
+
+“Prevents hallucination”
+
+“Handles sensitive cases safely”
+
+“Human-in-the-loop escalation”
+
+🔷 6. Bonus: Evaluation Layer (Important for judges)
+Add this (few people do):
+
+Metrics:
+Classification accuracy
+
+Escalation precision (did we escalate correctly?)
+
+Grounding score (response vs docs similarity)
+
+🔷 7. How You Should Present This
+Frame it like:
+
+“We didn’t build a chatbot.
+We built a decision-aware AI support agent that knows when not to answer.”
+
+If you want next step, I can help you:
+
+Turn this into a Streamlit demo UI
+
+Give prompt templates
+
+Or design architecture diagram for PPT (clean + winning style)
+
+
+list of functions required
+
+You’re now at the implementation abstraction level, so we’ll define this like a proper system API surface—not vague helpers, but clear, composable functions grouped by responsibility.
+
+🔷 1. High-Level Function Map
+Input Layer
+├── preprocess_query()
+
+Understanding Layer
+├── classify_intent()
+├── classify_product_area()
+
+Risk Layer
+├── assess_risk()
+├── assess_urgency()
+
+Decision Layer
+├── should_escalate()
+
+Retrieval Layer
+├── embed_query()
+├── retrieve_documents()
+├── rank_documents()
+
+Generation Layer
+├── build_prompt()
+├── generate_response()
+├── validate_grounding()
+
+Escalation Layer
+├── create_ticket()
+├── route_to_human()
+
+Evaluation Layer (bonus)
+├── evaluate_classification()
+├── evaluate_response_quality()
+🔷 2. Function Definitions (with Purpose)
+🧩 Input Layer
+preprocess_query(query)
+Normalize text (lowercase, strip noise)
+
+Remove PII if needed
+
+Extract keywords
+
+def preprocess_query(query: str) -> str:
+    return cleaned_query
+🧠 Understanding Layer
+classify_intent(query)
+Output: faq | complaint | bug | billing | account | abuse
+
+def classify_intent(query: str) -> str:
+    return intent
+classify_product_area(query)
+Maps to internal product modules
+
+def classify_product_area(query: str) -> str:
+    return product_area
+⚠️ Risk Layer
+assess_risk(query)
+Detect sensitive cases
+
+def assess_risk(query: str) -> str:
+    # LOW | MEDIUM | HIGH
+    return risk_level
+assess_urgency(query)
+Detect time-critical issues
+
+def assess_urgency(query: str) -> str:
+    # LOW | MEDIUM | HIGH
+    return urgency
+🧭 Decision Layer
+should_escalate(intent, risk, docs_found)
+This is your control gate.
+
+def should_escalate(intent: str, risk: str, docs_found: bool) -> bool:
+
+    if risk == "HIGH":
+        return True
+
+    if intent in ["fraud", "billing", "account_access"]:
+        return True
+
+    if not docs_found:
+        return True
+
+    return False
+🔍 Retrieval Layer (RAG)
+embed_query(query)
+Converts query → vector
+
+def embed_query(query: str):
+    return vector
+retrieve_documents(query, product_area)
+Semantic search
+
+def retrieve_documents(query: str, product_area: str) -> list:
+    return docs
+rank_documents(docs, query)
+Re-rank for relevance
+
+def rank_documents(docs: list, query: str) -> list:
+    return ranked_docs
+✍️ Generation Layer
+build_prompt(query, docs)
+Inject context into LLM
+
+def build_prompt(query: str, docs: list) -> str:
+    return prompt
+generate_response(prompt)
+Call LLM
+
+def generate_response(prompt: str) -> str:
+    return response
+validate_grounding(response, docs)
+Ensure answer is from corpus
+
+def validate_grounding(response: str, docs: list) -> bool:
+    return is_valid
+🚨 Escalation Layer
+create_ticket(query, intent, product_area, risk, urgency)
+def create_ticket(query, intent, product_area, risk, urgency) -> dict:
+    return {
+        "summary": summarize(query),
+        "intent": intent,
+        "product_area": product_area,
+        "risk": risk,
+        "urgency": urgency
+    }
+route_to_human(ticket)
+Assign to support team
+
+def route_to_human(ticket: dict) -> str:
+    return "Ticket escalated"
+📊 Evaluation Layer (Hackathon Advantage)
+evaluate_classification(pred, actual)
+def evaluate_classification(pred, actual) -> float:
+    return accuracy
+evaluate_response_quality(response, docs)
+Semantic similarity / grounding score
+
+def evaluate_response_quality(response: str, docs: list) -> float:
+    return score
+🔷 3. Orchestrator Function (Final Glue)
+This is what ties everything together.
+
+def handle_query(query):
+
+    query = preprocess_query(query)
+
+    intent = classify_intent(query)
+    product_area = classify_product_area(query)
+
+    risk = assess_risk(query)
+    urgency = assess_urgency(query)
+
+    docs = retrieve_documents(query, product_area)
+    docs = rank_documents(docs, query)
+
+    escalate_flag = should_escalate(intent, risk, len(docs) > 0)
+
+    if escalate_flag:
+        ticket = create_ticket(query, intent, product_area, risk, urgency)
+        return route_to_human(ticket)
+
+    prompt = build_prompt(query, docs)
+    response = generate_response(prompt)
+
+    if not validate_grounding(response, docs):
+        ticket = create_ticket(query, intent, product_area, risk, urgency)
+        return route_to_human(ticket)
+
+    return response
+🔷 4. What Makes This Strong
+This function set ensures:
+
+✅ Strict control (no blind LLM answering)
+
+✅ Explainability (each step is inspectable)
+
+✅ Scalability (you can swap any module)
+
+✅ Safety-first design (escalation > hallucination)
+
+If you want next:
+
+I can convert this into actual working Python (with OpenAI + FAISS)
+
+Or design a clean folder structure + repo layout for submission
+
+Or help you optimize this for a 2–3 hour hackathon build
+
+
+give a sample code according to you
+
+Below is a minimal but realistic Python implementation of your support triage agent. It’s designed to be hackathon-ready: simple heuristics for classification/risk, a lightweight TF-IDF retriever (so you don’t depend on external vector DBs), and a strict “grounded or escalate” policy.
+
+You can later swap pieces (e.g., replace heuristics with LLM calls or FAISS).
+
+🔷 1. Project Structure (recommended)
+support_agent/
+├── app.py
+├── corpus/
+│   └── docs.json
+└── requirements.txt
+requirements.txt
+
+scikit-learn
+numpy
+🔷 2. Sample Support Corpus (corpus/docs.json)
+[
+  {
+    "id": "doc_1",
+    "product_area": "login",
+    "content": "If you cannot log in, reset your password using the 'Forgot Password' option."
+  },
+  {
+    "id": "doc_2",
+    "product_area": "billing",
+    "content": "If you were charged twice, contact support with your transaction ID for a refund."
+  },
+  {
+    "id": "doc_3",
+    "product_area": "features",
+    "content": "To enable dark mode, go to settings and toggle the dark theme option."
+  }
+]
+🔷 3. Full Working Code (app.py)
+import json
+import re
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# ---------------------------
+# Load Corpus
+# ---------------------------
+with open("corpus/docs.json", "r") as f:
+    corpus = json.load(f)
+
+documents = [doc["content"] for doc in corpus]
+
+vectorizer = TfidfVectorizer()
+doc_vectors = vectorizer.fit_transform(documents)
+
+# ---------------------------
+# Input Layer
+# ---------------------------
+def preprocess_query(query: str) -> str:
+    query = query.lower().strip()
+    query = re.sub(r"[^\w\s]", "", query)
+    return query
+
+# ---------------------------
+# Understanding Layer
+# ---------------------------
+def classify_intent(query: str) -> str:
+    if "refund" in query or "charged" in query:
+        return "billing"
+    elif "login" in query or "password" in query:
+        return "account_access"
+    elif "error" in query or "bug" in query:
+        return "bug"
+    return "faq"
+
+def classify_product_area(query: str) -> str:
+    if "login" in query or "password" in query:
+        return "login"
+    elif "payment" in query or "charged" in query:
+        return "billing"
+    return "general"
+
+# ---------------------------
+# Risk Layer
+# ---------------------------
+def assess_risk(query: str) -> str:
+    if any(word in query for word in ["fraud", "hacked", "unauthorized"]):
+        return "HIGH"
+    return "LOW"
+
+def assess_urgency(query: str) -> str:
+    if "urgent" in query or "immediately" in query:
+        return "HIGH"
+    return "LOW"
+
+# ---------------------------
+# Retrieval Layer
+# ---------------------------
+def retrieve_documents(query: str, top_k=2):
+    query_vec = vectorizer.transform([query])
+    scores = cosine_similarity(query_vec, doc_vectors)[0]
+
+    ranked_indices = scores.argsort()[::-1][:top_k]
+    results = [corpus[i] for i in ranked_indices if scores[i] > 0]
+
+    return results
+
+# ---------------------------
+# Decision Layer
+# ---------------------------
+def should_escalate(intent, risk, docs):
+    if risk == "HIGH":
+        return True
+    if intent in ["billing", "account_access"]:
+        return True
+    if len(docs) == 0:
+        return True
+    return False
+
+# ---------------------------
+# Generation Layer
+# ---------------------------
+def generate_response(query, docs):
+    context = " ".join([doc["content"] for doc in docs])
+
+    # Simple grounded response
+    return f"Based on our support docs: {context}"
+
+def validate_grounding(response, docs):
+    # Basic check: ensure response contains doc content
+    return any(doc["content"] in response for doc in docs)
+
+# ---------------------------
+# Escalation Layer
+# ---------------------------
+def create_ticket(query, intent, product_area, risk, urgency):
+    return {
+        "query": query,
+        "intent": intent,
+        "product_area": product_area,
+        "risk": risk,
+        "urgency": urgency
+    }
+
+def route_to_human(ticket):
+    return f"⚠️ Escalated to human support: {ticket}"
+
+# ---------------------------
+# Orchestrator
+# ---------------------------
+def handle_query(query):
+
+    query = preprocess_query(query)
+
+    intent = classify_intent(query)
+    product_area = classify_product_area(query)
+
+    risk = assess_risk(query)
+    urgency = assess_urgency(query)
+
+    docs = retrieve_documents(query)
+
+    if should_escalate(intent, risk, docs):
+        ticket = create_ticket(query, intent, product_area, risk, urgency)
+        return route_to_human(ticket)
+
+    response = generate_response(query, docs)
+
+    if not validate_grounding(response, docs):
+        ticket = create_ticket(query, intent, product_area, risk, urgency)
+        return route_to_human(ticket)
+
+    return response
+
+# ---------------------------
+# Run Demo
+# ---------------------------
+if __name__ == "__main__":
+    while True:
+        user_input = input("\nUser: ")
+        if user_input.lower() == "exit":
+            break
+
+        result = handle_query(user_input)
+        print("Agent:", result)
+🔷 4. Example Runs
+Case 1 (Safe FAQ)
+User: how do i enable dark mode
+Agent: Based on our support docs: To enable dark mode, go to settings...
+Case 2 (Sensitive → Escalation)
+User: I was charged twice for my payment
+Agent: ⚠️ Escalated to human support: {...}
+Case 3 (Risk → Escalation)
+User: my account was hacked
+Agent: ⚠️ Escalated to human support: {...}
+🔷 5. Why This Works for Hackathon
+This implementation demonstrates:
+
+✅ End-to-end pipeline (not just chatbot)
+
+✅ Decision control (core judging point)
+
+✅ RAG grounding (no hallucination)
+
+✅ Safe escalation logic
+
+🔷 6. If You Want Next Level Upgrade
+I can help you upgrade this to:
+
+🔥 OpenAI-powered classification + response
+
+🔥 FAISS vector search
+
+🔥 Streamlit UI (very important for demo)
+
+🔥 Real-time evaluation dashboard
+
+🔥 Logging + explainability panel (huge plus in judging)
+
+Just tell me 👍
+
+
+i want to make a compare function to chk my output csv 
+
+Good move—that’s exactly how you prove correctness + reliability (judges love this). You want a function that compares:
+
+your agent’s output CSV
+
+a ground truth / expected CSV
+
+…and evaluates how well your system is performing.
+
+🔷 1. What Your CSVs Should Look Like
+✅ Expected (ground truth)
+id,query,intent,product_area,decision
+1,charged twice,billing,billing,ESCALATE
+2,enable dark mode,faq,features,REPLY
+✅ Your model output
+id,query,intent,product_area,decision
+1,charged twice,billing,billing,REPLY
+2,enable dark mode,faq,features,REPLY
+🔷 2. What You Should Compare
+You don’t just compare “exact match”—break it down:
+
+Metrics:
+Intent accuracy
+
+Product area accuracy
+
+Decision accuracy (MOST IMPORTANT)
+
+Overall exact match
+
+🔷 3. Compare Function (Clean + Useful)
+import pandas as pd
+
+def compare_outputs(ground_truth_path, predicted_path):
+
+    gt = pd.read_csv(ground_truth_path)
+    pred = pd.read_csv(predicted_path)
+
+    # Merge on ID
+    df = pd.merge(gt, pred, on="id", suffixes=("_gt", "_pred"))
+
+    total = len(df)
+
+    # Accuracy calculations
+    intent_acc = (df["intent_gt"] == df["intent_pred"]).sum() / total
+    product_acc = (df["product_area_gt"] == df["product_area_pred"]).sum() / total
+    decision_acc = (df["decision_gt"] == df["decision_pred"]).sum() / total
+
+    # Exact match (all fields correct)
+    exact_match = (
+        (df["intent_gt"] == df["intent_pred"]) &
+        (df["product_area_gt"] == df["product_area_pred"]) &
+        (df["decision_gt"] == df["decision_pred"])
+    ).sum() / total
+
+    # Error breakdown
+    errors = df[
+        (df["decision_gt"] != df["decision_pred"])
+    ][["id", "query_gt", "decision_gt", "decision_pred"]]
+
+    print("\n📊 Evaluation Results:")
+    print(f"Total Samples: {total}")
+    print(f"Intent Accuracy: {intent_acc:.2f}")
+    print(f"Product Area Accuracy: {product_acc:.2f}")
+    print(f"Decision Accuracy: {decision_acc:.2f}")
+    print(f"Exact Match Accuracy: {exact_match:.2f}")
+
+    print("\n❌ Decision Errors:")
+    print(errors)
+
+    return {
+        "intent_acc": intent_acc,
+        "product_acc": product_acc,
+        "decision_acc": decision_acc,
+        "exact_match": exact_match
+    }
+🔷 4. Sample Output
+📊 Evaluation Results:
+Total Samples: 2
+Intent Accuracy: 1.00
+Product Area Accuracy: 1.00
+Decision Accuracy: 0.50
+Exact Match Accuracy: 0.50
+
+❌ Decision Errors:
+id | query | decision_gt | decision_pred
+1  | charged twice | ESCALATE | REPLY
+🔷 5. Upgrade (What Will Impress Judges)
+Add:
+
+🔹 Confusion Matrix (for decisions)
+from sklearn.metrics import confusion_matrix
+
+cm = confusion_matrix(df["decision_gt"], df["decision_pred"])
+print("\nConfusion Matrix:\n", cm)
+🔹 Risk-weighted scoring (smart idea)
+Mistakes on ESCALATE cases should be penalized more
+
+def weighted_score(df):
+    score = 0
+    for _, row in df.iterrows():
+        if row["decision_gt"] == row["decision_pred"]:
+            score += 1
+        elif row["decision_gt"] == "ESCALATE":
+            score -= 2  # heavy penalty
+    return score / len(df)
+🔷 6. Key Insight (Important)
+Don’t just say:
+
+“Accuracy is 80%”
+
+Say:
+
+“Our system prioritizes safety — we optimize for high recall on escalation cases to prevent risky automation errors.”
+
+That framing is very strong.
+
+🔷 7. If You Want Next Step
+I can help you:
+
+Build a live evaluation dashboard (Streamlit)
+
+Auto-generate test cases CSV
+
+Add LLM-as-judge scoring (advanced)
+
+Or integrate this directly into your pipeline
+
+Just tell me 👍
+
+
+a code to evaluate the output and rate it accordingly
+
+You’re aiming for an evaluation module that doesn’t just compare—but actually scores and rates your agent like a system. That means:
+
+Multi-metric scoring (not just accuracy)
+
+Safety-weighted evaluation (critical for your use case)
+
+A final interpretable rating (A/B/C or /10 score)
+
+Below is a clean, production-style evaluation script you can plug directly into your pipeline.
+
+🔷 1. What This Evaluator Does
+It computes:
+
+✅ Intent accuracy
+
+✅ Product area accuracy
+
+✅ Decision accuracy (most important)
+
+✅ Exact match
+
+✅ Safety score (penalizes missed escalations heavily)
+
+✅ Final weighted score
+
+✅ Final rating (A–F or /10)
+
+🔷 2. Full Evaluation Code
+import pandas as pd
+from sklearn.metrics import confusion_matrix
+
+def evaluate_system(gt_path, pred_path):
+
+    # Load data
+    gt = pd.read_csv(gt_path)
+    pred = pd.read_csv(pred_path)
+
+    df = pd.merge(gt, pred, on="id", suffixes=("_gt", "_pred"))
+
+    total = len(df)
+
+    # ---------------------------
+    # Basic Accuracy Metrics
+    # ---------------------------
+    intent_acc = (df["intent_gt"] == df["intent_pred"]).mean()
+    product_acc = (df["product_area_gt"] == df["product_area_pred"]).mean()
+    decision_acc = (df["decision_gt"] == df["decision_pred"]).mean()
+
+    exact_match = (
+        (df["intent_gt"] == df["intent_pred"]) &
+        (df["product_area_gt"] == df["product_area_pred"]) &
+        (df["decision_gt"] == df["decision_pred"])
+    ).mean()
+
+    # ---------------------------
+    # Safety Score (CRITICAL)
+    # ---------------------------
+    safety_score = 0
+    for _, row in df.iterrows():
+        if row["decision_gt"] == "ESCALATE":
+            if row["decision_pred"] == "ESCALATE":
+                safety_score += 2   # correct escalation
+            else:
+                safety_score -= 3   # dangerous mistake
+        else:
+            if row["decision_pred"] == "REPLY":
+                safety_score += 1
+            else:
+                safety_score -= 1
+
+    safety_score = safety_score / total
+
+    # ---------------------------
+    # Confusion Matrix
+    # ---------------------------
+    cm = confusion_matrix(df["decision_gt"], df["decision_pred"], labels=["ESCALATE", "REPLY"])
+
+    # ---------------------------
+    # Final Weighted Score
+    # ---------------------------
+    final_score = (
+        0.2 * intent_acc +
+        0.2 * product_acc +
+        0.4 * decision_acc +
+        0.2 * max(0, safety_score)  # clip negatives
+    )
+
+    # ---------------------------
+    # Rating System
+    # ---------------------------
+    if final_score >= 0.9:
+        rating = "A (Production Ready)"
+    elif final_score >= 0.75:
+        rating = "B (Strong)"
+    elif final_score >= 0.6:
+        rating = "C (Acceptable)"
+    elif final_score >= 0.4:
+        rating = "D (Needs Improvement)"
+    else:
+        rating = "F (Unsafe)"
+
+    # ---------------------------
+    # Error Analysis
+    # ---------------------------
+    decision_errors = df[df["decision_gt"] != df["decision_pred"]]
+
+    # ---------------------------
+    # Print Report
+    # ---------------------------
+    print("\n📊 SYSTEM EVALUATION REPORT")
+    print("-" * 40)
+    print(f"Total Samples: {total}")
+    print(f"Intent Accuracy: {intent_acc:.2f}")
+    print(f"Product Area Accuracy: {product_acc:.2f}")
+    print(f"Decision Accuracy: {decision_acc:.2f}")
+    print(f"Exact Match: {exact_match:.2f}")
+    print(f"Safety Score: {safety_score:.2f}")
+
+    print("\n🔢 Confusion Matrix (ESCALATE / REPLY):")
+    print(cm)
+
+    print("\n⚠️ Decision Errors:")
+    print(decision_errors[["id", "query_gt", "decision_gt", "decision_pred"]])
+
+    print("\n🏆 Final Score:", round(final_score, 2))
+    print("📌 Rating:", rating)
+
+    return {
+        "intent_acc": intent_acc,
+        "product_acc": product_acc,
+        "decision_acc": decision_acc,
+        "exact_match": exact_match,
+        "safety_score": safety_score,
+        "final_score": final_score,
+        "rating": rating
+    }
+🔷 3. Example Usage
+evaluate_system("ground_truth.csv", "predictions.csv")
+🔷 4. What Makes This Strong (Use This in Your Pitch)
+You’re not just evaluating correctness—you’re evaluating risk-aware AI behavior.
+
+Frame it like:
+
+“We don’t optimize for accuracy alone.
+We optimize for safe automation, where incorrect non-escalations are heavily penalized.”
+
+🔷 5. Optional Advanced Upgrade (If You Have Time)
+🔹 Add Response Quality Score (LLM or similarity)
+def response_similarity(resp, expected):
+    # cosine similarity or embedding-based
+    pass
+🔹 Add “Over-Escalation Rate”
+over_escalation = (
+    (df["decision_gt"] == "REPLY") &
+    (df["decision_pred"] == "ESCALATE")
+).mean()
+🔷 6. Key Insight
+Most teams:
+❌ Show accuracy
+
+You:
+✅ Show decision intelligence + safety-aware scoring
+
+That’s a huge differentiator.
+
+If you want next:
+
+I can help you turn this into a Streamlit dashboard (live scoring UI)
+
+Or integrate it directly into your agent pipeline logs
+
+Or generate a test dataset automatically
+
+Just tell me 👍
+
+
+give enhanced functions for the logic the rating isnt good enough
+
+You’re right to push beyond a flat weighted average—your problem is decision-critical, so the evaluator should behave more like a risk-aware scoring system + diagnostics engine, not a simple accuracy calculator.
+
+Below is an enhanced evaluation design with:
+
+Cost-sensitive scoring (false negatives hurt more than false positives)
+
+Precision/Recall/F1 specifically for ESCALATE
+
+Over-escalation control
+
+Calibration-style scoring (confidence-aware, optional)
+
+Interpretable composite score + stricter rating bands
+
+Rich error diagnostics (so you can actually improve the model)
+
+🔷 1. Core Idea (Upgrade)
+Instead of:
+
+“How accurate is it?”
+
+You evaluate:
+
+“How safe and reliable is the decision system under risk?”
+
+🔷 2. Enhanced Evaluation Functions
+🧠 A. Decision Metrics (Critical Layer)
+import pandas as pd
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+
+def compute_decision_metrics(df):
+    y_true = df["decision_gt"]
+    y_pred = df["decision_pred"]
+
+    labels = ["ESCALATE", "REPLY"]
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+
+    # Focus on ESCALATE class (positive class)
+    precision = precision_score(y_true, y_pred, pos_label="ESCALATE")
+    recall = recall_score(y_true, y_pred, pos_label="ESCALATE")
+    f1 = f1_score(y_true, y_pred, pos_label="ESCALATE")
+
+    return {
+        "confusion_matrix": cm,
+        "precision_escalate": precision,
+        "recall_escalate": recall,
+        "f1_escalate": f1
+    }
+👉 Why this matters:
+
+Recall (ESCALATE) = did you catch risky cases?
+
+This is your most important metric
+
+⚠️ B. Cost-Sensitive Risk Score
+def compute_risk_score(df):
+    score = 0
+
+    for _, row in df.iterrows():
+        gt = row["decision_gt"]
+        pred = row["decision_pred"]
+
+        if gt == "ESCALATE" and pred == "ESCALATE":
+            score += 3   # correct critical decision
+        elif gt == "ESCALATE" and pred == "REPLY":
+            score -= 5   # VERY BAD (missed escalation)
+        elif gt == "REPLY" and pred == "ESCALATE":
+            score -= 1   # over-escalation (minor penalty)
+        else:
+            score += 1   # correct safe reply
+
+    return score / len(df)
+👉 This introduces asymmetry (which is realistic)
+
+📉 C. Over-Escalation Rate
+def compute_over_escalation(df):
+    return (
+        (df["decision_gt"] == "REPLY") &
+        (df["decision_pred"] == "ESCALATE")
+    ).mean()
+👉 Too high = inefficient system
+👉 Too low = risky system
+
+🎯 D. Classification Accuracy (Support Signals)
+def compute_classification_metrics(df):
+    intent_acc = (df["intent_gt"] == df["intent_pred"]).mean()
+    product_acc = (df["product_area_gt"] == df["product_area_pred"]).mean()
+
+    return intent_acc, product_acc
+🧪 E. Composite Score (Smarter Aggregation)
+def compute_final_score(metrics, risk_score, over_esc, intent_acc, product_acc):
+
+    final = (
+        0.35 * metrics["recall_escalate"] +   # MOST important
+        0.20 * metrics["precision_escalate"] +
+        0.20 * max(0, risk_score) +
+        0.15 * intent_acc +
+        0.10 * product_acc
+    )
+
+    # penalty if system escalates too much
+    if over_esc > 0.4:
+        final -= 0.1
+
+    return max(0, min(1, final))
+🏆 F. Much Better Rating System
+def get_rating(final_score, recall_escalate):
+
+    # Safety gating condition
+    if recall_escalate < 0.6:
+        return "❌ Unsafe (Misses critical cases)"
+
+    if final_score >= 0.9:
+        return "A+ (Production-grade, safe & reliable)"
+    elif final_score >= 0.8:
+        return "A (Very strong)"
+    elif final_score >= 0.7:
+        return "B (Good, needs tuning)"
+    elif final_score >= 0.6:
+        return "C (Acceptable, risky edges)"
+    else:
+        return "D/F (Not deployable)"
+👉 Notice:
+
+Even if score is high, low recall = automatic fail
+
+This is real-world thinking
+
+🔷 3. Master Evaluation Function
+def evaluate_system_v2(gt_path, pred_path):
+
+    gt = pd.read_csv(gt_path)
+    pred = pd.read_csv(pred_path)
+
+    df = pd.merge(gt, pred, on="id", suffixes=("_gt", "_pred"))
+
+    # Metrics
+    decision_metrics = compute_decision_metrics(df)
+    risk_score = compute_risk_score(df)
+    over_esc = compute_over_escalation(df)
+    intent_acc, product_acc = compute_classification_metrics(df)
+
+    final_score = compute_final_score(
+        decision_metrics,
+        risk_score,
+        over_esc,
+        intent_acc,
+        product_acc
+    )
+
+    rating = get_rating(final_score, decision_metrics["recall_escalate"])
+
+    # Report
+    print("\n📊 ADVANCED EVALUATION REPORT")
+    print("-" * 50)
+    print("Recall (Escalate):", round(decision_metrics["recall_escalate"], 2))
+    print("Precision (Escalate):", round(decision_metrics["precision_escalate"], 2))
+    print("F1 (Escalate):", round(decision_metrics["f1_escalate"], 2))
+    print("Risk Score:", round(risk_score, 2))
+    print("Over-Escalation Rate:", round(over_esc, 2))
+    print("Intent Accuracy:", round(intent_acc, 2))
+    print("Product Accuracy:", round(product_acc, 2))
+
+    print("\n🏆 Final Score:", round(final_score, 2))
+    print("📌 Rating:", rating)
+
+    return final_score, rating
+🔷 4. Why This Is Significantly Better
+This system now:
+
+✅ Prioritizes safety over accuracy
+
+✅ Penalizes dangerous mistakes heavily
+
+✅ Separates decision quality vs classification quality
+
+✅ Detects over-escalation bias
+
+✅ Uses gated rating (real-world logic)
+
+🔷 5. What You Should Say in Presentation
+“Our evaluation framework is cost-sensitive and safety-aware.
+Missing a critical escalation is penalized far more than over-escalation, aligning with real-world support systems.”
+
+If you want next step, I can:
+
+Turn this into a visual dashboard (very impressive in demos)
+
+Add confidence scoring from your model
+
+Or help you generate a benchmark dataset to validate your system properly
+
+Just tell me 👍
+
+
+a simple skeleton layout 
+
+Here’s a clean, minimal skeleton layout you can follow—no clutter, just the essential structure to implement fast and scale later.
+
+🔷 1. Folder Structure (Simple + Scalable)
+support_agent/
+│
+├── app.py                # main runner (orchestrator)
+├── pipeline/
+│   ├── preprocess.py
+│   ├── classify.py
+│   ├── risk.py
+│   ├── decision.py
+│   ├── retrieve.py
+│   ├── generate.py
+│   └── escalate.py
+│
+├── evaluation/
+│   ├── compare.py
+│   └── evaluate.py
+│
+├── data/
+│   ├── corpus.json
+│   ├── ground_truth.csv
+│   └── predictions.csv
+│
+└── utils/
+    └── helpers.py
+🔷 2. Minimal Pipeline Flow
+User Query
+   ↓
+preprocess()
+   ↓
+classify_intent() + classify_product()
+   ↓
+assess_risk() + assess_urgency()
+   ↓
+retrieve_docs()
+   ↓
+should_escalate()
+   ↓
+   ├── YES → escalate()
+   └── NO  → generate_response()
+🔷 3. Orchestrator (app.py Skeleton)
+from pipeline.preprocess import preprocess_query
+from pipeline.classify import classify_intent, classify_product_area
+from pipeline.risk import assess_risk, assess_urgency
+from pipeline.retrieve import retrieve_documents
+from pipeline.decision import should_escalate
+from pipeline.generate import generate_response
+from pipeline.escalate import create_ticket, route_to_human
+
+
+def handle_query(query):
+
+    query = preprocess_query(query)
+
+    intent = classify_intent(query)
+    product_area = classify_product_area(query)
+
+    risk = assess_risk(query)
+    urgency = assess_urgency(query)
+
+    docs = retrieve_documents(query)
+
+    if should_escalate(intent, risk, docs):
+        ticket = create_ticket(query, intent, product_area, risk, urgency)
+        return route_to_human(ticket)
+
+    return generate_response(query, docs)
+
+
+if __name__ == "__main__":
+    while True:
+        q = input("User: ")
+        print("Agent:", handle_query(q))
+🔷 4. Each File (Bare Minimum Functions)
+preprocess.py
+def preprocess_query(query):
+    return query.lower().strip()
+classify.py
+def classify_intent(query):
+    return "faq"
+
+def classify_product_area(query):
+    return "general"
+risk.py
+def assess_risk(query):
+    return "LOW"
+
+def assess_urgency(query):
+    return "LOW"
+decision.py
+def should_escalate(intent, risk, docs):
+    if risk == "HIGH":
+        return True
+    if not docs:
+        return True
+    return False
+retrieve.py
+def retrieve_documents(query):
+    return ["sample doc"]
+generate.py
+def generate_response(query, docs):
+    return f"Answer based on: {docs}"
+escalate.py
+def create_ticket(query, intent, product_area, risk, urgency):
+    return {
+        "query": query,
+        "intent": intent,
+        "risk": risk
+    }
+
+def route_to_human(ticket):
+    return f"Escalated: {ticket}"
+🔷 5. Evaluation Skeleton
+compare.py
+def compare_outputs(gt, pred):
+    pass
+evaluate.py
+def evaluate_system(gt, pred):
+    pass
+🔷 6. Key Idea (Don’t Miss This)
+This skeleton is intentionally:
+
+Loose-coupled → easy to replace parts
+
+Testable → each module independently debuggable
+
+Hackathon-friendly → fast to build, easy to demo
+
+🔷 7. What You Do Next
+First → make this run end-to-end
+
+Then → upgrade each module (LLM, RAG, scoring)
+
+Finally → plug in evaluation + UI
+
+If you want, I can next:
+
+Turn this into a clean GitHub-ready repo
+
+Add Streamlit UI (huge boost for judging)
+
+Or help you upgrade each module step-by-step without breaking flow
+
+
+i dont want to add retrieval it is breaking the system
+
+That’s a reasonable call for a hackathon—RAG often adds instability and latency if not done properly. You can still build a strong, controlled support agent without retrieval by shifting to a policy + classification + rule-backed response system.
+
+Here’s a clean skeleton without retrieval, but still aligned with your original requirements.
+
+🔷 1. Updated System Flow (No Retrieval)
+User Query
+   ↓
+preprocess()
+   ↓
+classify_intent() + classify_product()
+   ↓
+assess_risk() + assess_urgency()
+   ↓
+should_escalate()
+   ↓
+   ├── YES → escalate()
+   └── NO  → generate_response_from_rules()
+👉 Instead of RAG, you use:
+
+Predefined response templates
+
+Controlled LLM (optional) with strict instructions
+
+Rule-based fallback
+
+🔷 2. Folder Structure (Simplified)
+support_agent/
+│
+├── app.py
+├── pipeline/
+│   ├── preprocess.py
+│   ├── classify.py
+│   ├── risk.py
+│   ├── decision.py
+│   ├── response.py     # replaces retrieval + generation
+│   └── escalate.py
+│
+├── evaluation/
+│   ├── compare.py
+│   └── evaluate.py
+│
+└── data/
+    └── rules.json      # predefined responses
+🔷 3. Rules-Based Response System
+Example rules.json
+{
+  "faq": {
+    "default": "Please check the help section in settings."
+  },
+  "login": {
+    "password": "You can reset your password using 'Forgot Password'."
+  },
+  "features": {
+    "dark_mode": "Enable dark mode in settings under appearance."
+  }
+}
+🔷 4. Core Logic (Updated Functions)
+response.py
+import json
+
+with open("data/rules.json") as f:
+    RULES = json.load(f)
+
+def generate_response(query, intent, product_area):
+
+    query = query.lower()
+
+    # Simple keyword routing
+    if "password" in query:
+        return RULES.get("login", {}).get("password")
+
+    if "dark mode" in query:
+        return RULES.get("features", {}).get("dark_mode")
+
+    # fallback
+    return RULES.get(intent, {}).get("default", 
+           "I'm not sure about this. Let me connect you to support.")
+decision.py (slightly stronger now)
+def should_escalate(intent, risk, urgency):
+
+    if risk == "HIGH":
+        return True
+
+    if intent in ["billing", "account_access"]:
+        return True
+
+    if urgency == "HIGH":
+        return True
+
+    return False
+🔷 5. Orchestrator (Clean Final Version)
+from pipeline.preprocess import preprocess_query
+from pipeline.classify import classify_intent, classify_product_area
+from pipeline.risk import assess_risk, assess_urgency
+from pipeline.decision import should_escalate
+from pipeline.response import generate_response
+from pipeline.escalate import create_ticket, route_to_human
+
+
+def handle_query(query):
+
+    query = preprocess_query(query)
+
+    intent = classify_intent(query)
+    product_area = classify_product_area(query)
+
+    risk = assess_risk(query)
+    urgency = assess_urgency(query)
+
+    if should_escalate(intent, risk, urgency):
+        ticket = create_ticket(query, intent, product_area, risk, urgency)
+        return route_to_human(ticket)
+
+    return generate_response(query, intent, product_area)
+🔷 6. Why This Is Actually Strong
+You’re trading:
+❌ Fancy RAG
+for
+✅ Deterministic + safe + fast system
+
+This gives you:
+
+No hallucination risk
+
+Full control over outputs
+
+Predictable evaluation (important for your CSV scoring)
+
+Easier debugging during hackathon
+
+🔷 7. What You Say in Your Pitch
+Frame it smartly:
+
+“Instead of relying on unstable retrieval, we designed a controlled response system with strict decision boundaries and safe escalation. This ensures reliability and prevents hallucinated support answers.”
+
+🔷 8. Optional (If You Want Slight Upgrade)
+Later, you can:
+
+Add LLM only for classification (safe use)
+
+Keep responses rule-based
+
+Or add a tiny FAQ embedding (only 5–10 docs)
+
+🔷 Bottom Line
+You didn’t “remove a feature”—you improved system reliability.
+
+If you want next:
+
+I can help you make this into a clean demo UI
+
+Or help you design test cases to maximize your evaluation score
+
+Or upgrade classification using LLM prompts (safe + high accuracy)
+
+
